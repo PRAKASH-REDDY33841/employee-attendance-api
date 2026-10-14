@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Path, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pymongo import ASCENDING, DESCENDING, MongoClient, ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
@@ -55,6 +55,355 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Employee Attendance & Analytics API", version="2.0.0", lifespan=lifespan)
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/dashboard")
+
+
+@app.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
+def dashboard():
+    html_content = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Attendance & Analytics Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-hover: #24344d;
+            --border: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #06b6d4;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { background: var(--bg-base); color: var(--text-main); min-height: 100vh; padding: 24px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        
+        /* Header */
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+        .logo-group h1 { font-size: 24px; font-weight: 700; background: linear-gradient(135deg, #a5b4fc, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .logo-group p { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+        .nav-links { display: flex; gap: 12px; align-items: center; }
+        .btn { padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); }
+        .btn-secondary { background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border); }
+        .btn-secondary:hover { background: var(--border); }
+        
+        /* Status Badge */
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); display: inline-block; box-shadow: 0 0 10px var(--success); }
+        .db-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #a7f3d0; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); padding: 6px 14px; border-radius: 20px; }
+        
+        /* Stats Grid */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 28px; }
+        .stat-card { background: var(--bg-card); border: 1px solid var(--border); padding: 20px; border-radius: 12px; }
+        .stat-card .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600; }
+        .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 8px; color: #fff; }
+        
+        /* Action & Analytics Layout */
+        .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
+        @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+        
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+        .card-title { font-size: 16px; font-weight: 600; }
+        
+        /* Forms */
+        .form-group { margin-bottom: 14px; }
+        .form-label { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; }
+        .form-control { width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid var(--border); border-radius: 8px; color: white; font-size: 13px; }
+        .form-control:focus { outline: none; border-color: var(--primary); }
+        .form-row { display: flex; gap: 12px; }
+        
+        /* Tables */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+        th { padding: 12px 14px; background: #162032; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+        td { padding: 12px 14px; border-bottom: 1px solid rgba(51, 65, 85, 0.4); color: #cbd5e1; }
+        tr:hover td { background: rgba(255, 255, 255, 0.02); }
+        
+        /* Badges */
+        .badge { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; display: inline-block; }
+        .badge-present { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+        .badge-wfh { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
+        .badge-onduty { background: rgba(6, 182, 212, 0.15); color: #22d3ee; }
+        .badge-leave { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+        .badge-absent { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+        
+        /* Toast */
+        #toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; font-size: 13px; font-weight: 500; z-index: 100; opacity: 0; transition: all 0.3s; transform: translateY(10px); }
+        #toast.show { opacity: 1; transform: translateY(0); }
+        #toast.success { background: #065f46; color: #a7f3d0; border: 1px solid #059669; }
+        #toast.error { background: #7f1d1d; color: #fecaca; border: 1px solid #dc2626; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="logo-group">
+                <h1>HROne Attendance & Analytics Hub</h1>
+                <p>FastAPI & MongoDB Cloud Architecture • Live Production Dashboard</p>
+            </div>
+            <div class="nav-links">
+                <div class="db-status">
+                    <span class="status-dot"></span>
+                    <span id="dbState">Connected to Atlas</span>
+                </div>
+                <a href="/docs" target="_blank" class="btn btn-secondary">⚡ Swagger OpenAPI Docs</a>
+            </div>
+        </header>
+
+        <!-- Stats Overview -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="label">Total Employees</div>
+                <div class="value" id="statEmpCount">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Logged Attendance Records</div>
+                <div class="value" id="statLogCount">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Active Departments</div>
+                <div class="value" id="statDeptCount">3</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Analytics Window</div>
+                <div class="value" style="font-size: 20px; color: #a5b4fc;">July 2026</div>
+            </div>
+        </div>
+
+        <!-- Punch Simulator & Department Summary -->
+        <div class="main-grid">
+            <!-- Punch Card -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">🕒 Real-Time Attendance Punch Desk</div>
+                    <span style="font-size: 12px; color: var(--text-muted);">Rules R1–R5 Live</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Select Employee</label>
+                    <select id="punchEmp" class="form-control"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Punch Status</label>
+                    <select id="punchStatus" class="form-control">
+                        <option value="PRESENT">PRESENT (On-site)</option>
+                        <option value="WFH">WFH (Work from home)</option>
+                        <option value="ON_DUTY">ON_DUTY (Official duty)</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 18px;">
+                    <button onclick="handlePunch('in')" class="btn btn-primary" style="flex: 1;">⚡ Punch In</button>
+                    <button onclick="handlePunch('out')" class="btn btn-secondary" style="flex: 1; border-color: var(--primary); color: #a5b4fc;">🏁 Punch Out</button>
+                </div>
+                <div id="punchResult" style="margin-top: 16px; font-size: 13px; color: var(--text-muted); min-height: 20px;"></div>
+            </div>
+
+            <!-- Department Breakdown -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">📊 Department Performance Summary</div>
+                    <span style="font-size: 12px; color: var(--text-muted);">MongoDB Aggregation</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Department</th>
+                                <th>Headcount</th>
+                                <th>Present Days</th>
+                                <th>Avg Hours</th>
+                                <th>Late (min)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deptSummaryBody">
+                            <tr><td colspan="5" style="text-align:center;">Loading analytics...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Leaderboard & Recent Logs -->
+        <div class="main-grid">
+            <!-- Late Leaderboard -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">🏆 Late-Comers Leaderboard</div>
+                    <span style="font-size: 12px; color: var(--text-muted);">Rank Function ($setWindowFields)</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Employee</th>
+                                <th>Department</th>
+                                <th>Total Late</th>
+                                <th>Late Count</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboardBody">
+                            <tr><td colspan="5" style="text-align:center;">Loading leaderboard...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Recent Records -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">📋 Live Attendance Log Feed</div>
+                    <span style="font-size: 12px; color: var(--text-muted);">Latest 10 records</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Code</th>
+                                <th>Status</th>
+                                <th>Work Hours</th>
+                                <th>Overtime</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentLogsBody">
+                            <tr><td colspan="5" style="text-align:center;">Loading records...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>
+        function showToast(msg, isSuccess = true) {
+            const t = document.getElementById('toast');
+            t.className = isSuccess ? 'success' : 'error';
+            t.innerText = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3500);
+        }
+
+        async function loadData() {
+            try {
+                // Load Employees
+                const empRes = await fetch('/employees');
+                const empData = await empRes.json();
+                document.getElementById('statEmpCount').innerText = empData.total || 0;
+                
+                const punchSelect = document.getElementById('punchEmp');
+                punchSelect.innerHTML = empData.items.map(e => 
+                    `<option value="${e.emp_code}">${e.emp_code} - ${e.name} (${e.department})</option>`
+                ).join('');
+
+                // Load Logs
+                const logRes = await fetch('/attendance?page=1&page_size=10');
+                const logData = await logRes.json();
+                document.getElementById('statLogCount').innerText = logData.total || 0;
+
+                const logBody = document.getElementById('recentLogsBody');
+                logBody.innerHTML = logData.items.map(l => `
+                    <tr>
+                        <td style="font-weight:600;">${l.date}</td>
+                        <td>${l.emp_code}</td>
+                        <td><span class="badge badge-${l.status.toLowerCase()}">${l.status}</span></td>
+                        <td>${l.work_hours !== null ? l.work_hours + ' hrs' : '<span style="color:#64748b;">In-Progress</span>'}</td>
+                        <td>${l.overtime_minutes > 0 ? l.overtime_minutes + ' m' : '0'}</td>
+                    </tr>
+                `).join('');
+
+                // Load Department Summary
+                const deptRes = await fetch('/analytics/departments/summary?month=2026-07');
+                const deptData = await deptRes.json();
+                document.getElementById('statDeptCount').innerText = deptData.items.length;
+                document.getElementById('deptSummaryBody').innerHTML = deptData.items.map(d => `
+                    <tr>
+                        <td style="font-weight:600; color:#e2e8f0;">${d.department}</td>
+                        <td>${d.headcount}</td>
+                        <td>${d.present_days}</td>
+                        <td>${d.avg_work_hours !== null ? d.avg_work_hours + ' hrs' : '--'}</td>
+                        <td style="color:${d.total_late_minutes > 0 ? '#f87171' : '#94a3b8'};">${d.total_late_minutes} min</td>
+                    </tr>
+                `).join('');
+
+                // Load Leaderboard
+                const lbRes = await fetch('/analytics/leaderboard/late?month=2026-07');
+                const lbData = await lbRes.json();
+                if (lbData.items.length === 0) {
+                    document.getElementById('leaderboardBody').innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b;">No late arrivals this month! 🎉</td></tr>';
+                } else {
+                    document.getElementById('leaderboardBody').innerHTML = lbData.items.map(b => `
+                        <tr>
+                            <td style="font-weight:700; color:#fbbf24;">#${b.rank}</td>
+                            <td>${b.name} (${b.emp_code})</td>
+                            <td>${b.department}</td>
+                            <td style="font-weight:600; color:#f87171;">${b.total_late_minutes} min</td>
+                            <td>${b.late_count} times</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error('Failed loading data:', err);
+            }
+        }
+
+        async function handlePunch(type) {
+            const empCode = document.getElementById('punchEmp').value;
+            const status = document.getElementById('punchStatus').value;
+            const resEl = document.getElementById('punchResult');
+            
+            try {
+                let res;
+                if (type === 'in') {
+                    res = await fetch('/attendance/punch-in', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ emp_code: empCode, status: status })
+                    });
+                } else {
+                    res = await fetch('/attendance/punch-out', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ emp_code: empCode })
+                    });
+                }
+                const data = await res.json();
+                if (!res.ok) {
+                    showToast(data.detail || 'Punch failed', false);
+                    resEl.innerHTML = `<span style="color:#ef4444;">❌ Error: ${data.detail}</span>`;
+                } else {
+                    showToast(`Punch ${type.toUpperCase()} recorded for ${empCode}!`, true);
+                    resEl.innerHTML = `<span style="color:#10b981;">✅ Success: ${type.toUpperCase()} recorded for date ${data.date}.</span>`;
+                    loadData();
+                }
+            } catch (err) {
+                showToast('Network error during punch operation', false);
+            }
+        }
+
+        window.onload = loadData;
+    </script>
+</body>
+</html>
+"""
+    return HTMLResponse(content=html_content)
 
 
 # --------------------------------------------------------------------------- #
