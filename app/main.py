@@ -1184,16 +1184,10 @@ class ExplainOutput(BaseModel):
 
 
 def clean_bson_types(val: Any) -> Any:
-    """Recursively converts BSON datetimes and non-serializable objects to JSON primitives."""
-    if isinstance(val, dict):
-        return {k: clean_bson_types(v) for k, v in val.items()}
-    elif isinstance(val, list):
-        return [clean_bson_types(v) for v in val]
-    elif isinstance(val, datetime):
-        return dt_to_epoch_ms(val)
-    elif isinstance(val, Decimal):
-        return float(val)
-    return val
+    """Recursively converts BSON datetimes, Timestamps, ObjectIds, and other BSON types to JSON primitives."""
+    import json
+    from bson import json_util
+    return json.loads(json_util.dumps(val))
 
 
 @app.get("/admin/explain/{endpoint}", response_model=ExplainOutput, tags=["admin"])
